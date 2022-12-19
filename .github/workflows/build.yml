@@ -8,10 +8,14 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: Build OpenWrt
+name: Test Build OpenWrt
 
 on:
+  repository_dispatch:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'select a branch'
 
 permissions:
   contents: write
@@ -22,10 +26,10 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3.2.0
+      uses: actions/checkout@main
       with:
         repository: lovehackintosh/lede
-        ref: 'sync'
+        ref: '${{ github.event.inputs.branch }}'
         path: 'openwrt'
 
     - name: Initialization environment
@@ -34,7 +38,7 @@ jobs:
       run: |
         sudo -E rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /etc/mysql
         sudo -E apt update
-        sudo -E apt purge *aspnet* *dotnet* *android* *firefox*
+        sudo -E apt purge *aspnet* *dotnet* *android* *firefox* *azure*
         sudo -E apt full-upgrade -y
         sudo -E apt install -y ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         sudo -E apt autoremove --purge
@@ -44,31 +48,31 @@ jobs:
         export DOWNLOAD_TOOL_CUSTOM=aria2c
 
     - name: Checkout packages feed
-      uses: actions/checkout@v3.2.0
+      uses: actions/checkout@main
       with:
         repository: coolsnowwolf/packages
         path: openwrt/feeds/packages
 
     - name: Checkout luci feed
-      uses: actions/checkout@v3.2.0
+      uses: actions/checkout@main
       with:
         repository: coolsnowwolf/luci
         path: openwrt/feeds/luci
 
     - name: Checkout routing feed
-      uses: actions/checkout@v3.2.0
+      uses: actions/checkout@main
       with:
         repository: coolsnowwolf/routing
         path: openwrt/feeds/routing
 
     - name: Checkout telephony feed
-      uses: actions/checkout@v3.2.0
+      uses: actions/checkout@main
       with:
-        repository: coolsnowwolf/telephony
+        repository: openwrt/telephony
         path: openwrt/feeds/telephony
 
-    -name: Checkout helloworld feed
-      uses: actions/checkout@v3.2.0
+    - name: Checkout helloworld feed
+      uses: actions/checkout@main
       with:
         repository: fw876/helloworld
         path: openwrt/feeds/helloworld
@@ -86,13 +90,9 @@ jobs:
       run: |
         echo CONFIG_DEVEL=y >> .config
         echo CONFIG_AUTOREMOVE=y >> .config
-        echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
         echo CONFIG_CCACHE=y >> .config
-        echo CONFIG_BPF_TOOLCHAIN_BUILD_LLVM=y >> .config
-        echo CONFIG_TARGET_ramips=y >> .config
-        echo CONFIG_TARGET_ramips_mt7621=y >> .config
-        echo CONFIG_TARGET_ramips_mt7621_DEVICE_phicomm_k2p=y >> .config
-        echo CONFIG_DEFAULT_kmod-mt7615d_dbdc=y >> .config
+        echo CONFIG_TARGET_x86=y >> .config
+        echo CONFIG_TARGET_x86_64=y >> .config
         make defconfig
         ./scripts/diffconfig.sh
         make download -j16
@@ -100,11 +100,10 @@ jobs:
     - name: Compile the firmware
       working-directory: openwrt
       run: |
-        make tools/install -j4
-        make toolchain/install -j4
-        make target/compile -j4
-        make package/linux/compile -j4
-        make -j4
+        make tools/install -j$(nproc)
+        make toolchain/install -j$(nproc)
+        make target/compile -j$(nproc)
+        make -j$(nproc)
 
     - name: Check space usage
       run: df -hT
