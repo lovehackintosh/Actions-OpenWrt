@@ -16,6 +16,19 @@ on:
     inputs:
       branch:
         description: 'select a branch'
+      include_feeds:
+        type: boolean
+        description: 'include feeds'
+      target:
+        description: 'select a target'
+      subtarget:
+        description: 'select a subtarget'
+      package1:
+        description: 'insert a package'
+      package2:
+        description: 'insert a package'
+      package3:
+        description: 'insert a package'
 
 permissions:
   contents: write
@@ -38,7 +51,7 @@ jobs:
       run: |
         sudo -E rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /etc/mysql
         sudo -E apt update
-        sudo -E apt purge *aspnet* *dotnet* *android* *firefox* *azure*
+        sudo -E apt purge *aspnet* *dotnet* *android* *firefox* azure* *php* *mysql*
         sudo -E apt full-upgrade -y
         sudo -E apt install -y ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         sudo -E apt autoremove --purge
@@ -48,62 +61,92 @@ jobs:
         export DOWNLOAD_TOOL_CUSTOM=aria2c
 
     - name: Checkout packages feed
+      if: inputs.include_feeds == true
       uses: actions/checkout@main
       with:
         repository: coolsnowwolf/packages
         path: openwrt/feeds/packages
 
     - name: Checkout luci feed
+      if: inputs.include_feeds == true
       uses: actions/checkout@main
       with:
         repository: coolsnowwolf/luci
         path: openwrt/feeds/luci
 
     - name: Checkout routing feed
+      if: inputs.include_feeds == true
       uses: actions/checkout@main
       with:
         repository: coolsnowwolf/routing
         path: openwrt/feeds/routing
 
     - name: Checkout telephony feed
+      if: inputs.include_feeds == true
       uses: actions/checkout@main
       with:
         repository: openwrt/telephony
         path: openwrt/feeds/telephony
 
     - name: Checkout helloworld feed
+      if: inputs.include_feeds == true
       uses: actions/checkout@main
       with:
         repository: fw876/helloworld
         path: openwrt/feeds/helloworld
 
     - name: Update & Install feeds
+      if: inputs.include_feeds == true
       working-directory: openwrt
       run: |
         echo 'src-git helloworld https://github.com/fw876/helloworld' >> feeds.conf.default
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Download package
+    - name: Configure
       working-directory: openwrt
       id: package
       run: |
         echo CONFIG_DEVEL=y > .config
         echo CONFIG_AUTOREMOVE=y >> .config
         echo CONFIG_CCACHE=y >> .config
-        echo CONFIG_TARGET_x86=y >> .config
-        echo CONFIG_TARGET_x86_64=y >> .config
+        echo "CONFIG_TARGET_${{ github.event.inputs.target }}=y" >> .config
+        echo "CONFIG_TARGET_${{ github.event.inputs.target }}_${{ github.event.inputs.subtarget }}=y" >> .config
+        echo CONFIG_TARGET_MULTI_PROFILE=y >> .config
+        echo CONFIG_TARGET_PER_DEVICE_ROOTFS=y >> .config
+        echo CONFIG_TARGET_ALL_PROFILES=y >> .config
+        echo "${{ github.event.inputs.package1 }}" >> .config
+        echo "${{ github.event.inputs.package2 }}" >> .config
+        echo "${{ github.event.inputs.package3 }}" >> .config
         make defconfig
-        ./scripts/diffconfig.sh
-        make download -j16
 
-    - name: Compile the firmware
+    - name: Show configuration
       working-directory: openwrt
-      run: |
-        make tools/install -j$(nproc)
-        make toolchain/install -j$(nproc)
-        make target/compile -j$(nproc)
-        make -j$(nproc) || make -j$(nproc) || make -j1 V=s
+      run: ./scripts/diffconfig.sh
+
+    - name: Download packages
+      working-directory: openwrt
+      run: make download -j16
+
+    - name: Build tools
+      working-directory: openwrt
+      run: make tools/install -j$(nproc)
+
+    - name: Build toolchain
+      working-directory: openwrt
+      run: make toolchain/install -j$(nproc)
+
+    - name: Build Kernel
+      working-directory: openwrt
+      run: make target/compile -j$(nproc)
+
+    - name: Build Kernel Kmods
+      working-directory: openwrt
+      run: make package/linux/compile -j$(nproc)
+
+    - name: Build everything
+      working-directory: openwrt
+      run: make -j$(nproc) || make -j1 V=s
 
     - name: Check space usage
       run: df -hT
