@@ -54,7 +54,7 @@ if [ -z "$KERNEL" ]; then
 	echo "example: $0 3.18 3.18.30"
 	echo "If <version> is not given, it will try to find out the latest from kernel.org"
 	echo ""
-	echo "valid options:"
+	echo "invalid options:"
 	echo "-b|--build <args> also do a test build with <args> as extra arguments (e.g. -j 3)"
 	echo "-q|--quiet        less output"
 	echo "-t|--test         don't do anything, just print what it would do"
